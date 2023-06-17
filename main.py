@@ -4,8 +4,8 @@ import tkinter as tk
 from tkinter import filedialog, messagebox
 import getpass
 import json
-
-
+import xml.dom.minidom as minidom
+from openpyxl import Workbook, load_workbook
 def extract_cpu_info(xml_file):
     tree = ET.parse(xml_file)
     root = tree.getroot()
@@ -213,15 +213,113 @@ def select_xml_file():
         memory_info = extract_memory_info(file_path)
         domain_info = get_domain_info()
 
+        data = {
+            'Processor': cpu_info.get('CPU Brand Name'),
+            'Graphics card': gpu_info.get('Video Chipset'),
+            'Monitors': ', '.join(monitor_info),
+            'RAM': ram_info.get('Total Memory Size'),
+            'Motherboard': motherboard_info.get('Motherboard Model'),
+            'Domain': domain_info,
+            'Memory 1 capacity': memory_info.get('Drive Capacity', [''])[0],
+            'Memory 1 type': memory_info.get('Media Rotation Rate', [''])[0],
+            'Memory 2 capacity': memory_info.get('Drive Capacity', [''])[1],
+            'Memory 2 type': memory_info.get('Media Rotation Rate', [''])[1],
+            'Username': getpass.getuser()
+        }
+
         create_info_window(cpu_info, gpu_info, monitor_info, ram_info, motherboard_info, domain_info,
-                           memory_info)
+                           memory_info, data, file_path)
 
 
-def save():
-    pass
+
+def save(xml_file, data, custom_fields):
+    tree = ET.parse(xml_file)
+    root = tree.getroot()
+
+    # Create a new node for the saved information
+    info_node = ET.Element('SavedInfo')
+    for key, value in data.items():
+        property_node = ET.SubElement(info_node, 'Property')
+        entry_node = ET.SubElement(property_node, 'Entry')
+        entry_node.text = key
+        description_node = ET.SubElement(property_node, 'Description')
+        description_node.text = value
+
+    # Add data from custom fields
+    for field_frame in custom_fields:
+        field_entry = field_frame.winfo_children()[1]  # Access the Entry widget within the frame
+        field_label = field_frame.winfo_children()[0]['text'][:-1]
+        if field_entry.get() != '':
+            property_node = ET.SubElement(info_node, 'Property')
+            entry_node = ET.SubElement(property_node, 'Entry')
+            entry_node.text = field_label
+            description_node = ET.SubElement(property_node, 'Description')
+            description_node.text = field_entry.get()
+
+    # Append the new node to the root
+    root.append(info_node)
+
+    # Save the modified XML file
+    xml_string = ET.tostring(root, encoding='utf-8')
+    dom = minidom.parseString(xml_string)
+    pretty_xml_string = dom.toprettyxml(indent='  ')
+
+    with open(xml_file, 'w', encoding='utf-8') as file:
+        file.write(pretty_xml_string)
+
+    # Save the data to Excel file
+    excel_file = 'All_extracted_data.xlsx'
+    if not data_exists(excel_file):
+        create_excel_file(excel_file)
+
+    save_data_to_excel(excel_file, data)
 
 
-def create_info_window(cpu_info, gpu_info, monitor_info, ram_info, motherboard_info, domain_info, memory_info):
+def data_exists(excel_file):
+    try:
+        workbook = load_workbook(excel_file)
+        return True
+    except FileNotFoundError:
+        return False
+
+def create_excel_file(excel_file):
+    workbook = Workbook()
+    sheet = workbook.active
+
+    headers = [
+        'Processor', 'Graphics card', 'Monitors', 'RAM', 'Motherboard', 'Domain',
+        'Memory 1 capacity', 'Memory 1 type', 'Memory 2 capacity', 'Memory 2 type', 'Username'
+    ]
+
+    sheet.append(headers)
+    workbook.save(excel_file)
+
+def save_data_to_excel(excel_file, data):
+    workbook = load_workbook(excel_file)
+    sheet = workbook.active
+
+    row_data = [
+        data.get('Processor'),
+        data.get('Graphics card'),
+        data.get('Monitors'),
+        data.get('RAM'),
+        data.get('Motherboard'),
+        data.get('Domain'),
+        data.get('Memory 1 capacity', ''),
+        data.get('Memory 1 type', ''),
+        data.get('Memory 2 capacity', ''),
+        data.get('Memory 2 type', ''),
+        data.get('Username')
+    ]
+
+    sheet.append(row_data)
+    workbook.save(excel_file)
+
+
+
+
+
+def create_info_window(cpu_info, gpu_info, monitor_info, ram_info, motherboard_info, domain_info, memory_info, data, xml_file):
     window = tk.Toplevel()
     window.title('System Information')
     window.geometry('200x900')
@@ -238,10 +336,10 @@ def create_info_window(cpu_info, gpu_info, monitor_info, ram_info, motherboard_i
     add_button = tk.Button(custom_fields_frame, text='+', command=lambda: add_custom_field(window, custom_fields))
     add_button.configure(bg='#008a00', cursor='hand2', fg='#f0f0f0', font=('Arial', 12, 'bold'), relief='flat')
     add_button.pack(side='left', padx='10')
-    
-    add_button = tk.Button(custom_fields_frame, text='Save', command=save())
-    add_button.configure(bg='#008a00', cursor='hand2', fg='#f0f0f0', font=('Arial', 12, 'bold'), relief='flat')
-    add_button.pack(side='left', padx='10')
+
+    save_button = tk.Button(custom_fields_frame, text='Save', command=lambda: save(xml_file, data, custom_fields))
+    save_button.configure(bg='#008a00', cursor='hand2', fg='#f0f0f0', font=('Arial', 12, 'bold'), relief='flat')
+    save_button.pack(side='left', padx='10')
 
     for field_frame in custom_fields:
         field_frame.pack(anchor='w')
