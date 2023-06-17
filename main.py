@@ -3,6 +3,7 @@ import xml.etree.ElementTree as ET
 import tkinter as tk
 from tkinter import filedialog, messagebox
 import getpass
+import json
 
 
 def extract_cpu_info(xml_file):
@@ -118,6 +119,32 @@ def get_domain_info():
 
     return None
 
+
+def load_template(window, fields):
+    try:
+        with open('template.json', 'r') as file:
+            template = json.load(file)
+    except FileNotFoundError:
+        return
+
+    for field_name in template:
+        field_frame = tk.Frame(window)
+        field_frame.pack(anchor='w')
+
+        field_label = tk.Label(field_frame, text=field_name + ':')
+        field_label.pack(side='top')
+
+        field_var = tk.StringVar()
+        field_entry = tk.Entry(field_frame, textvariable=field_var, state='normal', width=30)
+        field_entry.pack(side='left')
+
+        delete_button = tk.Button(field_frame, text='-', command=lambda: delete_custom_field(fields, field_frame))
+        delete_button.configure(bg='#a60000', cursor='hand2', fg='#f0f0f0', font=('Arial', 12, 'bold'), relief='flat')
+        delete_button.pack(side='left')
+
+        fields.append(field_frame)
+
+
 def add_custom_field(window, fields):
     field_name = tk.simpledialog.askstring('Custom Field', 'Enter field name:')
     if field_name:
@@ -132,17 +159,47 @@ def add_custom_field(window, fields):
         field_entry.pack(side='left')
 
         delete_button = tk.Button(field_frame, text='-', command=lambda: delete_custom_field(fields, field_frame))
-        delete_button.configure(bg='#a60000', cursor='hand2', fg='#f0f0f0', font=('Arial', 12, 'bold'), relief = 'flat')
+        delete_button.configure(bg='#a60000', cursor='hand2', fg='#f0f0f0', font=('Arial', 12, 'bold'), relief='flat')
         delete_button.pack(side='left')
 
         fields.append(field_frame)
+
+        save_template(fields)
+
+
+def save_template(fields):
+    template = []
+    for field_frame in fields:
+        field_name = field_frame.winfo_children()[0]['text'][:-1]
+        template.append(field_name)
+
+    with open('template.json', 'w') as file:
+        json.dump(template, file)
 
 
 def delete_custom_field(fields, field_frame):
     result = messagebox.askquestion('Delete Field', 'Are you sure you want to delete this field?', icon='warning')
     if result == 'yes':
+        field_label = field_frame.winfo_children()[0]
+        field_name = field_label['text'][:-1]
         field_frame.destroy()
         fields.remove(field_frame)
+        update_template_file(fields, field_name)
+
+def update_template_file(fields, deleted_field_name):
+    template = []
+    for field_frame in fields:
+        field_label = field_frame.winfo_children()[0]
+        field_name = field_label['text'][:-1]
+        template.append(field_name)
+
+    with open('template.json', 'r') as file:
+        template_data = json.load(file)
+
+    template_data.remove(deleted_field_name)
+
+    with open('template.json', 'w') as file:
+        json.dump(template_data, file)
 
 
 def select_xml_file():
@@ -159,6 +216,11 @@ def select_xml_file():
         create_info_window(cpu_info, gpu_info, monitor_info, ram_info, motherboard_info, domain_info,
                            memory_info)
 
+
+def save():
+    pass
+
+
 def create_info_window(cpu_info, gpu_info, monitor_info, ram_info, motherboard_info, domain_info, memory_info):
     window = tk.Toplevel()
     window.title('System Information')
@@ -174,6 +236,10 @@ def create_info_window(cpu_info, gpu_info, monitor_info, ram_info, motherboard_i
     custom_fields_frame.pack(anchor='center')
 
     add_button = tk.Button(custom_fields_frame, text='+', command=lambda: add_custom_field(window, custom_fields))
+    add_button.configure(bg='#008a00', cursor='hand2', fg='#f0f0f0', font=('Arial', 12, 'bold'), relief='flat')
+    add_button.pack(side='left', padx='10')
+    
+    add_button = tk.Button(custom_fields_frame, text='Save', command=save())
     add_button.configure(bg='#008a00', cursor='hand2', fg='#f0f0f0', font=('Arial', 12, 'bold'), relief='flat')
     add_button.pack(side='left', padx='10')
 
@@ -247,6 +313,7 @@ def create_info_window(cpu_info, gpu_info, monitor_info, ram_info, motherboard_i
     username_entry = tk.Entry(window, textvariable=username_var, state='normal', width=30)
     username_entry.pack(anchor='w')
 
+    load_template(window, custom_fields)
 
 root = tk.Tk()
 root.withdraw()
